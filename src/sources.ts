@@ -27,7 +27,11 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
     throw new Error("offline")
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json()
+  try {
+    return await response.json()
+  } catch {
+    throw new Error("bad body")
+  }
 }
 
 const loadCopilot: Loader = async (env) => {

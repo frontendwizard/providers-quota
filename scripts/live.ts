@@ -1,7 +1,5 @@
 import { loaders, type Credential } from "../src/sources"
-import { view, type SourceID, type State } from "../src/quota"
-
-const labels: Record<SourceID, string> = { copilot: "Copilot", openai: "OpenAI", anthropic: "Claude" }
+import { SOURCES, view, type SourceID, type State } from "../src/quota"
 
 const result = Bun.spawnSync(["opencode", "api", "get", "/api/credential"])
 if (result.exitCode !== 0) throw new Error("`opencode api get /api/credential` failed. Is OpenCode installed and running?")
@@ -18,6 +16,6 @@ for (const id of ids) {
   } catch (error) {
     state = { type: "failed", error: error instanceof Error ? error.message : "offline" }
   }
-  const shown = view(state, Date.now(), "full", labels[id])
+  const shown = view(state, Date.now(), "full", SOURCES.find((source) => source.id === id)?.label ?? id)
   console.log(`${id}: ${state.type}`, shown.text ? `${shown.text} (${shown.tone})` : "")
 }

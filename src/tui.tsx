@@ -132,11 +132,12 @@ export default Plugin.define({
       try {
         connected = connectedProviders(await context.client.integration.list())
       } catch {
-        // Keep the last known set: a failed lookup must not hide sources.
+        // Keep the last known set. Until a lookup succeeds nothing counts as configured,
+        // so no loader reads a foreign credential.
       }
       for (const source of SOURCES) {
-        if (connected && !isConfigured(source, connected)) update(source.id, () => ({ type: "absent" }))
-        else void refresh(source.id)
+        if (connected && isConfigured(source, connected)) void refresh(source.id)
+        else update(source.id, () => ({ type: "absent" }))
       }
     }
     void refreshAll()
