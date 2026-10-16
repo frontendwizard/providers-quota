@@ -81,7 +81,7 @@ export default Plugin.define({
       return (
         <Show when={line()}>
           {(current) => (
-            <text fg={color(current().tone)} selectable={false} onMouseUp={rotate}>
+            <text fg={color(current().tone)} selectable={false} flexShrink={0} onMouseUp={rotate}>
               {current().text}
             </text>
           )}
@@ -90,9 +90,11 @@ export default Plugin.define({
     }
 
     const unslot = [
-      // The home footer already shows the line; the narrow home prompt would wrap it.
+      // Appended after the built-in shell and subagent indicator and never shrunk, so a shell
+      // starting on its left squeezes only the path. The home footer already shows the line,
+      // and the narrow home prompt would wrap it.
       context.ui.slot({
-        append: "prompt.footer.status",
+        append: "prompt.footer",
         render: () => (
           <Show when={context.ui.router.current().type === "session"}>
             <QuotaLine />

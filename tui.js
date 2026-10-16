@@ -357,6 +357,7 @@ var tui_default = Plugin.define({
         children: (current) => (() => {
           var _el$ = _$createElement("text");
           _$setProp(_el$, "selectable", false);
+          _$setProp(_el$, "flexShrink", 0);
           _$setProp(_el$, "onMouseUp", rotate);
           _$insert(_el$, () => current().text);
           _$effect((_$p) => _$setProp(_el$, "fg", color(current().tone), _$p));
@@ -366,7 +367,7 @@ var tui_default = Plugin.define({
     };
     const unslot = [
       context.ui.slot({
-        append: "prompt.footer.status",
+        append: "prompt.footer",
         render: () => _$createComponent(Show, {
           get when() {
             return context.ui.router.current().type === "session";
