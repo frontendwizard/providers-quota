@@ -19,6 +19,12 @@ import { homedir, platform } from "os";
 import { join } from "path";
 
 // src/quota.ts
+var DEFAULT_SETTINGS = {
+  compact: false,
+  position: "right",
+  colored: true,
+  reset: { full: true, compact: false }
+};
 var SOURCES = [
   { id: "copilot", label: "Copilot", providers: ["github-copilot"] },
   { id: "openai", label: "OpenAI", providers: ["openai"] },
@@ -97,14 +103,12 @@ var detail = {
   month: ({ counts }) => counts ? ` (${number(counts.remaining)}/${number(counts.entitlement)})` : "",
   week: () => " \xB7 weekly"
 };
+var resets = (quota) => ` \xB7 resets ${quota.resetAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
 var formats = {
-  full: (quota, label) => {
-    const resets = quota.resetAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-    return `${label} ${percentLeft(quota)}% left${detail[quota.period](quota)} \xB7 resets ${resets}`;
-  },
-  compact: (quota, label) => `${label} ${percentLeft(quota)}% left`
+  full: (quota, label, reset) => `${label} ${percentLeft(quota)}% left${detail[quota.period](quota)}${reset ? resets(quota) : ""}`,
+  compact: (quota, label, reset) => `${label} ${percentLeft(quota)}% left${reset ? resets(quota) : ""}`
 };
-var readyText = (quota, mode, label) => quota.unlimited ? `${label} unlimited` : formats[mode](quota, label);
+var readyText = (quota, mode, label, reset) => quota.unlimited ? `${label} unlimited` : formats[mode](quota, label, reset);
 var cycleStart = {
   month: (resetAt) => {
     const start = new Date(resetAt);
@@ -119,18 +123,18 @@ var paceTone = ({ percentRemaining, resetAt, period }, now) => {
   const cycleLeft = (resetAt.getTime() - now) / (resetAt.getTime() - cycleStart[period](resetAt).getTime());
   return percentRemaining / 100 < cycleLeft ? "warning" : "success";
 };
-function view(state, now, mode, label) {
+function view(state, now, mode, label, reset = DEFAULT_SETTINGS.reset[mode]) {
   switch (state.type) {
     case "loading":
       return { text: `${label} \u2026`, tone: "muted" };
     case "ready":
       return {
-        text: readyText(state.quota, mode, label),
+        text: readyText(state.quota, mode, label, reset),
         tone: state.quota.unlimited ? "muted" : paceTone(state.quota, now)
       };
     case "failed":
       if (state.last)
-        return { text: `${readyText(state.last, mode, label)} \xB7 stale`, tone: "muted" };
+        return { text: `${readyText(state.last, mode, label, reset)} \xB7 stale`, tone: "muted" };
       return { text: `${label} quota: ${state.error}`, tone: "error" };
     case "absent":
       return { text: "", tone: "muted" };

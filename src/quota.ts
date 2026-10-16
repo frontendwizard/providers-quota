@@ -14,6 +14,19 @@ export type State =
   | { type: "absent" }
 export type Tone = "muted" | "success" | "warning" | "error"
 export type Mode = "full" | "compact"
+export type Position = "left" | "right"
+export type Settings = {
+  compact: boolean
+  position: Position
+  colored: boolean
+  reset: Record<Mode, boolean>
+}
+export const DEFAULT_SETTINGS: Settings = {
+  compact: false,
+  position: "right",
+  colored: true,
+  reset: { full: true, compact: false },
+}
 
 export const SOURCES: ReadonlyArray<{ id: SourceID; label: string; providers: readonly string[] }> = [
   { id: "copilot", label: "Copilot", providers: ["github-copilot"] },
@@ -46,6 +59,23 @@ export function connectedProviders(response: unknown): ReadonlySet<string> {
 
 export const isConfigured = (source: { providers: readonly string[] }, connected: ReadonlySet<string>) =>
   source.providers.some((provider) => connected.has(provider))
+
+const flag = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback)
+
+/** Reads the stored settings, which may be missing, partial, or from an older version. */
+export function resolveSettings(raw: unknown): Settings {
+  const stored = isRecord(raw) ? raw : {}
+  const reset = isRecord(stored.reset) ? stored.reset : {}
+  return {
+    compact: flag(stored.compact, DEFAULT_SETTINGS.compact),
+    position: stored.position === "left" || stored.position === "right" ? stored.position : DEFAULT_SETTINGS.position,
+    colored: flag(stored.colored, DEFAULT_SETTINGS.colored),
+    reset: {
+      full: flag(reset.full, DEFAULT_SETTINGS.reset.full),
+      compact: flag(reset.compact, DEFAULT_SETTINGS.reset.compact),
+    },
+  }
+}
 
 export function parseCopilot(json: unknown): Quota {
   if (!isRecord(json)) throw new Error("bad body")
@@ -117,16 +147,17 @@ const detail: Record<Period, (quota: Quota) => string> = {
   week: () => " · weekly",
 }
 
-const formats: Record<Mode, (quota: Quota, label: string) => string> = {
-  full: (quota, label) => {
-    const resets = quota.resetAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
-    return `${label} ${percentLeft(quota)}% left${detail[quota.period](quota)} · resets ${resets}`
-  },
-  compact: (quota, label) => `${label} ${percentLeft(quota)}% left`,
+const resets = (quota: Quota) =>
+  ` · resets ${quota.resetAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`
+
+const formats: Record<Mode, (quota: Quota, label: string, reset: boolean) => string> = {
+  full: (quota, label, reset) =>
+    `${label} ${percentLeft(quota)}% left${detail[quota.period](quota)}${reset ? resets(quota) : ""}`,
+  compact: (quota, label, reset) => `${label} ${percentLeft(quota)}% left${reset ? resets(quota) : ""}`,
 }
 
-const readyText = (quota: Quota, mode: Mode, label: string) =>
-  quota.unlimited ? `${label} unlimited` : formats[mode](quota, label)
+const readyText = (quota: Quota, mode: Mode, label: string, reset: boolean) =>
+  quota.unlimited ? `${label} unlimited` : formats[mode](quota, label, reset)
 
 const cycleStart: Record<Period, (resetAt: Date) => Date> = {
   month: (resetAt) => {
@@ -143,17 +174,23 @@ const paceTone = ({ percentRemaining, resetAt, period }: Quota, now: number): To
   return percentRemaining / 100 < cycleLeft ? "warning" : "success"
 }
 
-export function view(state: State, now: number, mode: Mode, label: string): { text: string; tone: Tone } {
+export function view(
+  state: State,
+  now: number,
+  mode: Mode,
+  label: string,
+  reset: boolean = DEFAULT_SETTINGS.reset[mode],
+): { text: string; tone: Tone } {
   switch (state.type) {
     case "loading":
       return { text: `${label} …`, tone: "muted" }
     case "ready":
       return {
-        text: readyText(state.quota, mode, label),
+        text: readyText(state.quota, mode, label, reset),
         tone: state.quota.unlimited ? "muted" : paceTone(state.quota, now),
       }
     case "failed":
-      if (state.last) return { text: `${readyText(state.last, mode, label)} · stale`, tone: "muted" }
+      if (state.last) return { text: `${readyText(state.last, mode, label, reset)} · stale`, tone: "muted" }
       return { text: `${label} quota: ${state.error}`, tone: "error" }
     case "absent":
       return { text: "", tone: "muted" }
