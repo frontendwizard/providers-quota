@@ -5,17 +5,29 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    "./tui": "./tui.tsx"
+    "./tui": "./tui.js"
   },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "live": "bun scripts/live.ts"
+    "live": "bun scripts/live.ts",
+    "compile": "bun scripts/compile.ts"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.5.17",
     "@opentui/solid": ">=0.5.17",
     "solid-js": ">=1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@opencode/plugin": "^2.0.30",
