@@ -60,12 +60,17 @@ OpenAI usage comes from your Codex CLI login and not from OpenCode's OpenAI logi
 
 ## Use
 
-The line sits in the footer on the home screen. Inside a session it sits at the right end of the prompt row, after the built-in shell and subagent indicator, so it does not move when a background shell starts. A muted dot divider, like the ones between the built-in footer segments, comes before it. On a terminal narrower than about 90 columns the full format is cut off at the right edge, so use `/quota` for the compact format. Every 60 seconds the plugin checks which providers are connected and refreshes the usage of each one. A newly connected provider appears after its first usage request finishes.
+The line sits in the footer on the home screen. By default, inside a session it sits at the right end of the prompt row, after the built-in shell and subagent indicator, so it does not move when a background shell starts. A muted dot divider, like the ones between the built-in footer segments, faces the session stats. On a terminal narrower than about 90 columns the full format is cut off at the right edge, so use `/quota` for the compact format. Every 60 seconds the plugin checks which providers are connected and refreshes the usage of each one. A newly connected provider appears after its first usage request finishes.
 
 - Click the line to show the next provider. Rotation order is Copilot, OpenAI, Claude. It skips providers that are not set up and keeps providers whose last refresh failed, because their message tells you the fix.
 - One second after your last click, the line returns to the provider of the model you are using. When that provider is not set up, it returns to the first provider in the rotation order that is.
 - Run `/quota-next` to rotate from the keyboard. It is also in the command palette as "Next quota source".
-- Run `/quota` to switch between the full and the compact format. OpenCode remembers the choice across restarts.
+- Run `/quota` to switch between the full and the compact format.
+- Run `/quota-reset` to show or hide the reset date. OpenCode keeps this setting separately for each format. By default the full format shows the date and the compact format hides it. With the date on, the compact format reads `Copilot 55.8% left · resets Nov 1`.
+- Run `/quota-position` to move the line to the left or to the right of the session stats, which are the shell and subagent indicator, the usage numbers, and the key hints. The default is the right. On the left, the line sits in the status box next to the stats, and it moves a few columns when the shell indicator appears.
+- Run `/quota-color` to switch between the status colors and the gray of the session stats.
+
+OpenCode remembers every one of these settings across restarts.
 
 | | Full | Compact |
 | --- | --- | --- |
@@ -78,6 +83,8 @@ The color compares the share of quota left with the share of the period left.
 - Yellow means you are using quota faster than the period passes.
 - Red means less than 10% is left, or a refresh failed and there is no earlier reading to show.
 - Gray means the plan is unlimited, the first request is still loading and the text reads `Copilot …`, or a refresh failed and the text shows the last reading with "· stale".
+
+With `/quota-color` off, the whole line is gray, whatever its state.
 
 When a refresh fails and there is no earlier reading, the line shows the provider and a short message, for example `OpenAI quota: Codex login expired`.
 
@@ -92,14 +99,14 @@ When a refresh fails and there is no earlier reading, the line shows the provide
 | Another `HTTP` code | The provider failed or rate-limited the request. The plugin retries after 60 seconds. |
 | `bad body`, `no weekly window`, `no premium_interactions`, or `bad` followed by a field name | The provider changed its response, or the response was not JSON. Open an issue with the shape of the response, with secrets removed. |
 
-The plugin has no options. To change the refresh interval or the snap-back delay, edit `REFRESH_MS` or `SNAP_BACK_MS` at the top of `src/tui.tsx`, then run `bun run compile`.
+The display settings are the commands above. To change the refresh interval or the snap-back delay, edit `REFRESH_MS` or `SNAP_BACK_MS` at the top of `src/tui.tsx`, then run `bun run compile`.
 
 ## Credentials and privacy
 
 - The plugin only reads credentials. It never refreshes a token and never writes to `~/.codex`, the Keychain, or OpenCode's credential store. A refresh can rotate the refresh token and sign you out of Codex or Claude Code.
 - Each token goes only to the provider's own host, listed in the table above. The plugin has no telemetry and writes no logs.
 - It reads the Keychain only when Anthropic is connected in OpenCode. A read happens when no usable token is cached, and then at most once every 10 minutes. macOS may ask you to allow it. If the plugin cannot get the list of connected providers, it treats every provider as not connected and reads nothing.
-- OpenCode stores one setting for the plugin, the compact flag.
+- OpenCode stores the plugin's display settings, which are the format, the side, the color mode, and the reset flags.
 
 ## Limitations
 

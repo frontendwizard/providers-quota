@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   connectedProviders,
+  DEFAULT_SETTINGS,
   isConfigured,
   jwtExpiry,
   nextSource,
@@ -8,11 +9,13 @@ import {
   parseCodex,
   parseCopilot,
   pickSource,
+  resolveSettings,
   SOURCE_ORDER,
   SOURCES,
   view,
   type Mode,
   type Quota,
+  type Settings,
   type State,
   type States,
 } from "../src/quota"
@@ -119,6 +122,64 @@ describe("view with a missing reading", () => {
 
   test("renders nothing for an absent source", () => {
     expect(copilot({ type: "absent" })).toEqual({ text: "", tone: "muted" })
+  })
+})
+
+describe("view with the reset date toggled", () => {
+  const openai = (state: State, mode: Mode, reset: boolean) => view(state, now, mode, "OpenAI", reset)
+
+  test("hides the reset date in the full format", () => {
+    expect(view(ready(), now, "full", "Copilot", false)).toEqual({
+      text: "Copilot 57.8% left (28,939/50,000)",
+      tone: "success",
+    })
+    expect(openai(weekly(), "full", false)).toEqual({ text: "OpenAI 0% left · weekly", tone: "error" })
+  })
+
+  test("shows the reset date in the compact format", () => {
+    expect(view(ready(), now, "compact", "Copilot", true)).toEqual({
+      text: "Copilot 57.8% left · resets Nov 1",
+      tone: "success",
+    })
+    expect(openai(weekly(), "compact", true)).toEqual({ text: "OpenAI 0% left · resets Oct 22", tone: "error" })
+  })
+
+  test("defaults to the reset date in the full format only", () => {
+    expect(view(ready(), now, "full", "Copilot").text).toContain("resets Nov 1")
+    expect(view(ready(), now, "compact", "Copilot").text).not.toContain("resets")
+  })
+
+  test("keeps the stale marker last", () => {
+    const failed: State = { type: "failed", error: "offline", last: quota() }
+    expect(view(failed, now, "compact", "Copilot", true).text).toBe("Copilot 57.8% left · resets Nov 1 · stale")
+    expect(view(failed, now, "full", "Copilot", false).text).toBe("Copilot 57.8% left (28,939/50,000) · stale")
+  })
+
+  test("leaves unlimited plans alone", () => {
+    expect(view(ready({ unlimited: true }), now, "full", "Copilot", true).text).toBe("Copilot unlimited")
+  })
+})
+
+describe("resolveSettings", () => {
+  test("returns the defaults for a missing or unusable value", () => {
+    expect(resolveSettings(undefined)).toEqual(DEFAULT_SETTINGS)
+    expect(resolveSettings(null)).toEqual(DEFAULT_SETTINGS)
+    expect(resolveSettings("compact")).toEqual(DEFAULT_SETTINGS)
+  })
+
+  test("keeps the compact flag from the first version and defaults the rest", () => {
+    expect(resolveSettings({ compact: true })).toEqual({ ...DEFAULT_SETTINGS, compact: true })
+  })
+
+  test("reads every stored setting", () => {
+    const stored: Settings = { compact: true, position: "left", colored: false, reset: { full: false, compact: true } }
+    expect(resolveSettings(stored)).toEqual(stored)
+  })
+
+  test("ignores values of the wrong type and keeps the valid ones", () => {
+    const stored = { compact: "yes", position: "middle", colored: 0, reset: { full: "no", compact: true } }
+    expect(resolveSettings(stored)).toEqual({ ...DEFAULT_SETTINGS, reset: { full: true, compact: true } })
+    expect(resolveSettings({ reset: "none" })).toEqual(DEFAULT_SETTINGS)
   })
 })
 
