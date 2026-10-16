@@ -3,14 +3,17 @@ import { createSignal, Show } from "solid-js"
 import { loaders, type Env } from "./sources"
 import {
   connectedProviders,
+  DEFAULT_SETTINGS,
   isConfigured,
   nextSource,
   pickSource,
+  resolveSettings,
   SOURCE_ORDER,
   SOURCES,
   view,
   type Mode,
   type Quota,
+  type Settings,
   type SourceID,
   type State,
   type States,
@@ -31,8 +34,13 @@ export default Plugin.define({
   async setup(context) {
     const [states, setStates] = createSignal<States>(initial())
     const [manual, setManual] = createSignal<SourceID | undefined>(undefined)
-    const [settings, updateSettings] = context.storage.store("settings", { initial: { compact: false } })
-    const mode = (): Mode => (settings.compact ? "compact" : "full")
+    const [stored, updateStored] = context.storage.store("settings", { initial: DEFAULT_SETTINGS })
+    const settings = () => resolveSettings(stored)
+    const change = (patch: (current: Settings) => Partial<Settings>) =>
+      updateStored((draft) => {
+        Object.assign(draft, patch(settings()))
+      })
+    const mode = (): Mode => (settings().compact ? "compact" : "full")
     const env: Env = { credentials: async () => await context.client.credential.list() }
     const inFlight = new Set<SourceID>()
     let snapBack: ReturnType<typeof setTimeout> | undefined
@@ -69,33 +77,57 @@ export default Plugin.define({
     }
 
     const color = (tone: Tone) => (tone === "muted" ? context.theme.text.muted : context.theme.text.feedback[tone].base)
-    const QuotaLine = () => {
+    const QuotaLine = (props: { divider?: "before" | "after" }) => {
       const line = () => {
         const id = shown()
         if (!id) return undefined
-        const result = view(states()[id], Date.now(), mode(), labels.get(id) ?? id)
+        const result = view(states()[id], Date.now(), mode(), labels.get(id) ?? id, settings().reset[mode()])
         return result.text ? result : undefined
       }
+      const divider = (side: "before" | "after") => (
+        <Show when={props.divider === side}>
+          <span style={{ fg: context.theme.text.muted }}>{side === "before" ? "· " : " ·"}</span>
+        </Show>
+      )
       // Rotate on release: the text is right-aligned and resizes on rotation, so a press
       // handler would let the release land on the neighbouring footer location, which opens a dialog.
       return (
         <Show when={line()}>
           {(current) => (
-            <text fg={color(current().tone)} selectable={false} onMouseUp={rotate}>
+            <text
+              fg={settings().colored ? color(current().tone) : context.theme.text.muted}
+              selectable={false}
+              flexShrink={0}
+              onMouseUp={rotate}
+            >
+              {divider("before")}
               {current().text}
+              {divider("after")}
             </text>
           )}
         </Show>
       )
     }
 
+    const inSession = () => context.ui.router.current().type === "session"
     const unslot = [
-      // The home footer already shows the line; the narrow home prompt would wrap it.
+      // Right goes after the built-in shell and subagent indicator and the hints, and never
+      // shrinks, so a shell starting on its left squeezes only the path. Left goes in the status
+      // box beside the path, and it moves when the indicator appears. The dot faces the stats.
+      // The home footer already shows the line, and the narrow home prompt would wrap it.
+      context.ui.slot({
+        append: "prompt.footer",
+        render: () => (
+          <Show when={inSession() && settings().position === "right"}>
+            <QuotaLine divider="before" />
+          </Show>
+        ),
+      }),
       context.ui.slot({
         append: "prompt.footer.status",
         render: () => (
-          <Show when={context.ui.router.current().type === "session"}>
-            <QuotaLine />
+          <Show when={inSession() && settings().position === "left"}>
+            <QuotaLine divider="after" />
           </Show>
         ),
       }),
@@ -111,10 +143,31 @@ export default Plugin.define({
           group: "Provider quota",
           palette: true,
           slash: { name: "quota" },
-          run: () =>
-            updateSettings((draft) => {
-              draft.compact = !draft.compact
-            }),
+          run: () => change((current) => ({ compact: !current.compact })),
+        },
+        {
+          id: "providers-quota.reset",
+          title: "Toggle the reset date in the quota line",
+          group: "Provider quota",
+          palette: true,
+          slash: { name: "quota-reset" },
+          run: () => change((current) => ({ reset: { ...current.reset, [mode()]: !current.reset[mode()] } })),
+        },
+        {
+          id: "providers-quota.position",
+          title: "Move the quota line left or right of the session stats",
+          group: "Provider quota",
+          palette: true,
+          slash: { name: "quota-position" },
+          run: () => change((current) => ({ position: current.position === "right" ? "left" : "right" })),
+        },
+        {
+          id: "providers-quota.color",
+          title: "Toggle the quota line color",
+          group: "Provider quota",
+          palette: true,
+          slash: { name: "quota-color" },
+          run: () => change((current) => ({ colored: !current.colored })),
         },
         {
           id: "providers-quota.next",
