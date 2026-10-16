@@ -15,7 +15,7 @@ import {
   type Quota,
   type State,
   type States,
-} from "../quota"
+} from "../src/quota"
 
 const now = Date.parse("2026-10-16T00:00:00.000Z")
 const day = 86_400_000

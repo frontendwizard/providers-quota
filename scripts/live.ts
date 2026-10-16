@@ -1,5 +1,5 @@
-import { loaders, type Credential } from "../sources"
-import { view, type SourceID, type State } from "../quota"
+import { loaders, type Credential } from "../src/sources"
+import { view, type SourceID, type State } from "../src/quota"
 
 const labels: Record<SourceID, string> = { copilot: "Copilot", openai: "OpenAI", anthropic: "Claude" }
 
