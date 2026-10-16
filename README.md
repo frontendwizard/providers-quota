@@ -60,7 +60,7 @@ OpenAI usage comes from your Codex CLI login and not from OpenCode's OpenAI logi
 
 ## Use
 
-The line sits in the prompt row inside a session and in the footer on the home screen. Every 60 seconds the plugin checks which providers are connected and refreshes the usage of each one. A newly connected provider appears after its first usage request finishes.
+The line sits in the footer on the home screen. Inside a session it sits at the right end of the prompt row, after the built-in shell and subagent indicator, so it does not move when a background shell starts. A muted dot divider, like the ones between the built-in footer segments, comes before it. On a terminal narrower than about 90 columns the full format is cut off at the right edge, so use `/quota` for the compact format. Every 60 seconds the plugin checks which providers are connected and refreshes the usage of each one. A newly connected provider appears after its first usage request finishes.
 
 - Click the line to show the next provider. Rotation order is Copilot, OpenAI, Claude. It skips providers that are not set up and keeps providers whose last refresh failed, because their message tells you the fix.
 - One second after your last click, the line returns to the provider of the model you are using. When that provider is not set up, it returns to the first provider in the rotation order that is.

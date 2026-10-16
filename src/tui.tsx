@@ -69,7 +69,7 @@ export default Plugin.define({
     }
 
     const color = (tone: Tone) => (tone === "muted" ? context.theme.text.muted : context.theme.text.feedback[tone].base)
-    const QuotaLine = () => {
+    const QuotaLine = (props: { divider?: boolean }) => {
       const line = () => {
         const id = shown()
         if (!id) return undefined
@@ -81,7 +81,10 @@ export default Plugin.define({
       return (
         <Show when={line()}>
           {(current) => (
-            <text fg={color(current().tone)} selectable={false} onMouseUp={rotate}>
+            <text fg={color(current().tone)} selectable={false} flexShrink={0} onMouseUp={rotate}>
+              <Show when={props.divider}>
+                <span style={{ fg: context.theme.text.muted }}>{"· "}</span>
+              </Show>
               {current().text}
             </text>
           )}
@@ -90,12 +93,15 @@ export default Plugin.define({
     }
 
     const unslot = [
-      // The home footer already shows the line; the narrow home prompt would wrap it.
+      // Appended after the built-in shell and subagent indicator and never shrunk, so a shell
+      // starting on its left squeezes only the path. The leading dot matches the built-in
+      // footer dividers. The home footer already shows the line, and the narrow home prompt
+      // would wrap it.
       context.ui.slot({
-        append: "prompt.footer.status",
+        append: "prompt.footer",
         render: () => (
           <Show when={context.ui.router.current().type === "session"}>
-            <QuotaLine />
+            <QuotaLine divider />
           </Show>
         ),
       }),
