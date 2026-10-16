@@ -1,0 +1,28 @@
+{
+  "name": "providers-quota",
+  "version": "0.1.0",
+  "description": "Show how much of each AI subscription you have left in the OpenCode footer.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./tui": "./tui.tsx"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "live": "bun scripts/live.ts"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.17",
+    "@opentui/solid": ">=0.5.17",
+    "solid-js": ">=1.9.0"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "^2.0.30",
+    "@opentui/core": "^0.6.6",
+    "@opentui/solid": "^0.6.6",
+    "bun-types": "^1.4.3",
+    "solid-js": "^1.9.17",
+    "typescript": "^7.0.2"
+  }
+}
