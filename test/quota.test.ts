@@ -3,6 +3,7 @@ import {
   codexHttpError,
   connectedProviders,
   DEFAULT_SETTINGS,
+  hoverRgb,
   isConfigured,
   jwtExpiry,
   nextSource,
@@ -562,5 +563,26 @@ describe("connectedProviders", () => {
   test("rejects anything but the response envelope", () => {
     expect(() => connectedProviders(integrations)).toThrow(/bad integrations/)
     expect(() => connectedProviders(undefined)).toThrow(/bad integrations/)
+  })
+})
+
+describe("hoverRgb", () => {
+  const muted = [120, 120, 120] as const
+  const base = [240, 240, 240] as const
+
+  test("returns the base triple when the resting color is muted", () => {
+    expect(hoverRgb([120, 120, 120], muted, base)).toBe(base)
+  })
+
+  test("moves a status color 45 percent toward base", () => {
+    expect(hoverRgb([0, 0, 0], muted, [100, 200, 40])).toEqual([45, 90, 18])
+  })
+
+  test("rounds each channel to an integer", () => {
+    expect(hoverRgb([0, 1, 255], muted, [10, 12, 250])).toEqual([5, 6, 253])
+  })
+
+  test("stays on base when the resting color is already base", () => {
+    expect(hoverRgb(base, muted, base)).toEqual([240, 240, 240])
   })
 })

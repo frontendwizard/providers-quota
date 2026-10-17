@@ -1,9 +1,11 @@
 import { Plugin } from "@opencode/plugin/tui"
+import { RGBA } from "@opentui/core"
 import { createSignal, Show } from "solid-js"
 import { loaders, type Env } from "./sources"
 import {
   connectedProviders,
   DEFAULT_SETTINGS,
+  hoverRgb,
   isConfigured,
   nextSource,
   pickSource,
@@ -83,12 +85,26 @@ export default Plugin.define({
     }
 
     const color = (tone: Tone) => (tone === "muted" ? context.theme.text.muted : context.theme.text.feedback[tone].base)
+    const channels = (value: RGBA): readonly [number, number, number] => {
+      const [red, green, blue] = value.toInts()
+      return [red, green, blue]
+    }
     const QuotaLine = (props: { divider?: "before" | "after" }) => {
+      const [hovered, setHovered] = createSignal(false)
       const line = () => {
         const id = shown()
         if (!id) return undefined
         const result = view(states()[id], Date.now(), mode(), labels.get(id) ?? id, settings().reset[mode()])
         return result.text ? result : undefined
+      }
+      const fg = (tone: Tone) => {
+        const resting = settings().colored ? color(tone) : context.theme.text.muted
+        if (!hovered()) return resting
+        const base = channels(context.theme.text.base)
+        const next = hoverRgb(channels(resting), channels(context.theme.text.muted), base)
+        // hoverRgb returns that base triple for a gray line, so use the theme color itself.
+        if (next === base) return context.theme.text.base
+        return RGBA.fromInts(next[0], next[1], next[2], resting.toInts()[3])
       }
       const divider = (side: "before" | "after") => (
         <Show when={props.divider === side}>
@@ -100,16 +116,18 @@ export default Plugin.define({
       return (
         <Show when={line()}>
           {(current) => (
-            <text
-              fg={settings().colored ? color(current().tone) : context.theme.text.muted}
-              selectable={false}
+            <box
               flexShrink={0}
+              onMouseOver={() => setHovered(true)}
+              onMouseOut={() => setHovered(false)}
               onMouseUp={rotate}
             >
-              {divider("before")}
-              {current().text}
-              {divider("after")}
-            </text>
+              <text fg={fg(current().tone)} selectable={false} wrapMode="none">
+                {divider("before")}
+                {current().text}
+                {divider("after")}
+              </text>
+            </box>
           )}
         </Show>
       )
