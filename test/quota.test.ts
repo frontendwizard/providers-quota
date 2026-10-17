@@ -8,6 +8,7 @@ import {
   parseClaude,
   parseCodex,
   parseCopilot,
+  parseGo,
   parseXai,
   pickSource,
   resolveSettings,
@@ -49,6 +50,7 @@ const states = (overrides: Partial<States> = {}): States => ({
   openai: { type: "loading" },
   anthropic: { type: "loading" },
   xai: { type: "loading" },
+  go: { type: "loading" },
   ...overrides,
 })
 const allAbsent: States = {
@@ -56,6 +58,7 @@ const allAbsent: States = {
   openai: { type: "absent" },
   anthropic: { type: "absent" },
   xai: { type: "absent" },
+  go: { type: "absent" },
 }
 
 describe("view with a monthly quota", () => {
@@ -98,6 +101,28 @@ describe("view with a weekly quota", () => {
     const ahead = weekly({ percentRemaining: 50, resetAt: new Date(now + 2 * day) })
     expect(view(behind, now, "full", "Claude").tone).toBe("warning")
     expect(view(ahead, now, "full", "Claude").tone).toBe("success")
+  })
+})
+
+describe("view with a five hour quota", () => {
+  const hour = 60 * 60 * 1000
+  const fiveHour = (percentRemaining: number, hoursLeft: number): State => ({
+    type: "ready",
+    quota: {
+      percentRemaining,
+      resetAt: new Date(now + hoursLeft * hour),
+      period: "five-hour",
+      unlimited: false,
+    },
+  })
+
+  test("labels the window in the full format", () => {
+    expect(view(fiveHour(80, 2), now, "full", "Go", false).text).toBe("Go 80% left · 5 hour")
+  })
+
+  test("compares the quota left with the share of the five hours left", () => {
+    expect(view(fiveHour(50, 4), now, "full", "Go").tone).toBe("warning")
+    expect(view(fiveHour(50, 1), now, "full", "Go").tone).toBe("success")
   })
 })
 
@@ -328,6 +353,86 @@ describe("parseXai", () => {
   })
 })
 
+describe("parseGo", () => {
+  const body = {
+    usage: {
+      rolling: { status: "ok", percent: 1, resetsAt: "2026-10-17T11:30:54.000Z" },
+      weekly: { status: "ok", percent: 30, resetsAt: "2026-10-19T00:00:00.000Z" },
+      monthly: { status: "ok", percent: 17, resetsAt: "2026-10-20T09:43:54.000Z" },
+    },
+  }
+
+  test("reads the window with the highest used percent", () => {
+    expect(parseGo(body)).toEqual({
+      percentRemaining: 70,
+      resetAt: new Date("2026-10-19T00:00:00.000Z"),
+      period: "week",
+      unlimited: false,
+    })
+  })
+
+  test("reads the five hour window when it is used more than the weekly window", () => {
+    const rollingFullest = {
+      usage: {
+        ...body.usage,
+        rolling: { ...body.usage.rolling, percent: 40 },
+        weekly: { ...body.usage.weekly, percent: 12 },
+      },
+    }
+    expect(parseGo(rollingFullest)).toEqual({
+      percentRemaining: 60,
+      resetAt: new Date("2026-10-17T11:30:54.000Z"),
+      period: "five-hour",
+      unlimited: false,
+    })
+  })
+
+  test("picks the shorter window when used percents tie", () => {
+    const tied = {
+      usage: {
+        ...body.usage,
+        rolling: { ...body.usage.rolling, percent: 30 },
+      },
+    }
+    expect(parseGo(tied)).toEqual({
+      percentRemaining: 70,
+      resetAt: new Date("2026-10-17T11:30:54.000Z"),
+      period: "five-hour",
+      unlimited: false,
+    })
+  })
+
+  test("skips a window with no finite percent or no date", () => {
+    const skipped = {
+      usage: {
+        rolling: { percent: 90, resetsAt: "nope" },
+        weekly: { percent: 30, resetsAt: "2026-10-19T00:00:00.000Z" },
+        monthly: { percent: "17", resetsAt: "2026-10-20T09:43:54.000Z" },
+      },
+    }
+    expect(parseGo(skipped)).toEqual({
+      percentRemaining: 70,
+      resetAt: new Date("2026-10-19T00:00:00.000Z"),
+      period: "week",
+      unlimited: false,
+    })
+  })
+
+  test("rejects a body with no usable window", () => {
+    expect(() => parseGo({ usage: {} })).toThrow("no billing period")
+    expect(() => parseGo(null)).toThrow("no billing period")
+    expect(() =>
+      parseGo({
+        usage: {
+          rolling: { percent: 1, resetsAt: "nope" },
+          weekly: { status: "ok" },
+          monthly: { percent: Number.NaN, resetsAt: "2026-10-20T09:43:54.000Z" },
+        },
+      }),
+    ).toThrow("no billing period")
+  })
+})
+
 describe("jwtExpiry", () => {
   const jwt = (payload: object) => `h.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.s`
 
@@ -347,14 +452,15 @@ describe("nextSource", () => {
     expect(nextSource(SOURCE_ORDER, "copilot", states())).toBe("openai")
     expect(nextSource(SOURCE_ORDER, "openai", states())).toBe("anthropic")
     expect(nextSource(SOURCE_ORDER, "anthropic", states())).toBe("xai")
-    expect(nextSource(SOURCE_ORDER, "xai", states())).toBe("copilot")
+    expect(nextSource(SOURCE_ORDER, "xai", states())).toBe("go")
+    expect(nextSource(SOURCE_ORDER, "go", states())).toBe("copilot")
     expect(nextSource(SOURCE_ORDER, undefined, states())).toBe("copilot")
   })
 
   test("skips absent sources", () => {
     expect(nextSource(SOURCE_ORDER, "copilot", states({ openai: { type: "absent" } }))).toBe("anthropic")
     expect(nextSource(SOURCE_ORDER, "anthropic", states({ copilot: { type: "absent" } }))).toBe("xai")
-    expect(nextSource(SOURCE_ORDER, "xai", states({ copilot: { type: "absent" } }))).toBe("openai")
+    expect(nextSource(SOURCE_ORDER, "go", states({ copilot: { type: "absent" } }))).toBe("openai")
   })
 
   test("keeps failed sources in the rotation", () => {
@@ -363,7 +469,12 @@ describe("nextSource", () => {
   })
 
   test("stays on the shown source when no other qualifies", () => {
-    const onlyCopilot = states({ openai: { type: "absent" }, anthropic: { type: "absent" }, xai: { type: "absent" } })
+    const onlyCopilot = states({
+      openai: { type: "absent" },
+      anthropic: { type: "absent" },
+      xai: { type: "absent" },
+      go: { type: "absent" },
+    })
     expect(nextSource(SOURCE_ORDER, "copilot", onlyCopilot)).toBe("copilot")
   })
 
@@ -378,11 +489,12 @@ describe("pickSource", () => {
     expect(pickSource("openai", states())).toBe("openai")
     expect(pickSource("anthropic", states())).toBe("anthropic")
     expect(pickSource("xai", states())).toBe("xai")
+    expect(pickSource("opencode-go", states())).toBe("go")
   })
 
   test("falls back to the first present source", () => {
-    expect(pickSource("opencode-go", states())).toBe("copilot")
-    expect(pickSource("opencode-go", states({ copilot: { type: "absent" } }))).toBe("openai")
+    expect(pickSource("groq", states())).toBe("copilot")
+    expect(pickSource("groq", states({ copilot: { type: "absent" } }))).toBe("openai")
     expect(pickSource("openai", states({ openai: { type: "absent" } }))).toBe("copilot")
     expect(pickSource(undefined, states())).toBe("copilot")
   })
@@ -407,12 +519,12 @@ describe("connectedProviders", () => {
   test("keeps integrations that have a connection, saved login or env key", () => {
     const connected = connectedProviders({ location: { directory: "/x" }, data: integrations })
     expect([...connected].sort()).toEqual(["github-copilot", "groq", "openai", "opencode-go", "xai"])
-    expect(sourcesFor(connected)).toEqual(["copilot", "openai", "xai"])
+    expect(sourcesFor(connected)).toEqual(["copilot", "openai", "xai", "go"])
   })
 
   test("adds a source when its provider gets connected", () => {
     const withKey = connectedProviders({ data: [...integrations.slice(1), { id: "anthropic", connections: [{ type: "env" }] }] })
-    expect(sourcesFor(withKey)).toEqual(["copilot", "openai", "anthropic", "xai"])
+    expect(sourcesFor(withKey)).toEqual(["copilot", "openai", "anthropic", "xai", "go"])
   })
 
   test("ignores malformed entries", () => {

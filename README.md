@@ -54,8 +54,9 @@ The repository contains the compiled plugin, `tui.js`, so there is nothing to in
 | OpenAI | Weekly | `chatgpt.com/backend-api/wham/usage`, with the token in `~/.codex/auth.json` | `openai` connected in OpenCode, and a Codex CLI signed in with ChatGPT |
 | Claude | Weekly (seven days) | `api.anthropic.com/api/oauth/usage`, with the token in the macOS Keychain item `Claude Code-credentials` | `anthropic` connected in OpenCode, macOS, and Claude Code signed in |
 | xAI | Subscription window, weekly or monthly | `cli-chat-proxy.grok.com/v1/billing?format=credits`, with the OpenCode xAI OAuth access token | `xai` connected in OpenCode with the SuperGrok device login. An API key connection is skipped. |
+| Go | The window closest to its limit, among the 5-hour, weekly, and monthly windows | `opencode.ai/zen/go/v1/usage`, with the OpenCode Go API key | `opencode-go` connected in OpenCode |
 
-The plugin asks OpenCode which providers are connected, either as a saved login or as an API key in an environment variable. It shows a provider only when OpenCode has it connected and the plugin has a reader for it. An xAI API key connection is skipped, because that login has no subscription meter. Other connected providers, such as OpenCode Go, expose no usage endpoint, so the plugin skips them.
+The plugin asks OpenCode which providers are connected, either as a saved login or as an API key in an environment variable. It shows a provider only when OpenCode has it connected and the plugin has a reader for it. An xAI API key connection is skipped, because that login has no subscription meter. A connected provider with no reader is skipped.
 
 OpenAI usage comes from your Codex CLI login and not from OpenCode's OpenAI login. In testing on OpenCode 2.0.30, the usage endpoint rejected OpenCode's token with a 401. That token is issued for calling models.
 
@@ -63,7 +64,7 @@ OpenAI usage comes from your Codex CLI login and not from OpenCode's OpenAI logi
 
 The line sits in the footer on the home screen. By default, inside a session it sits at the right end of the prompt row, after the built-in shell and subagent indicator, so it does not move when a background shell starts. A muted dot divider, like the ones between the built-in footer segments, faces the session stats. On a terminal narrower than about 90 columns the full format is cut off at the right edge, so use `/quota` for the compact format. Every 60 seconds the plugin checks which providers are connected and refreshes the usage of each one. A newly connected provider appears after its first usage request finishes.
 
-- Click the line to show the next provider. Rotation order is Copilot, OpenAI, Claude, xAI. It skips providers that are not set up and keeps providers whose last refresh failed, because their message tells you the fix.
+- Click the line to show the next provider. Rotation order is Copilot, OpenAI, Claude, xAI, Go. It skips providers that are not set up and keeps providers whose last refresh failed, because their message tells you the fix.
 - One second after your last click, the line returns to the provider of the model you are using. When that provider is not set up, it returns to the first provider in the rotation order that is.
 - Run `/quota-next` to rotate from the keyboard. It is also in the command palette as "Next quota source".
 - Run `/quota` to switch between the full and the compact format.
@@ -77,8 +78,9 @@ OpenCode remembers every one of these settings across restarts.
 | --- | --- | --- |
 | Monthly | `Copilot 55.8% left (27,943/50,000) · resets Nov 1` | `Copilot 55.8% left` |
 | Weekly | `OpenAI 0% left · weekly · resets Oct 22` | `OpenAI 0% left` |
+| Five-hour | `Go 80% left · 5 hour · resets Oct 16` | `Go 80% left` |
 
-The color compares the share of quota left with the share of the period left.
+The color compares the share of quota left with the share of the period left. The period is a month, seven days, or five hours.
 
 - Green means you are on pace or ahead.
 - Yellow means you are using quota faster than the period passes.
@@ -112,9 +114,10 @@ The display settings are the commands above. To change the refresh interval or t
 
 ## Limitations
 
-- All four usage endpoints are undocumented. A provider can change or remove one without notice, and the line then shows an error.
+- All five usage endpoints are undocumented. A provider can change or remove one without notice, and the line then shows an error.
 - The Claude reader has never run against a live response. Its parser follows the response shape that `api.anthropic.com/api/oauth/usage` is expected to return, `seven_day.utilization` and `seven_day.resets_at`, and it is covered only by a fixture. If you use it, report whether the number matches Claude Code.
 - The xAI reader has been checked against one live billing response.
+- The Go reader has been checked against one live usage response.
 - Claude Code and the Codex CLI refresh their tokens only while you use them. The Claude and OpenAI lines read "login expired" once the token lapses, until you run the tool again.
 - The OpenAI reader labels the longest window it finds as weekly. A plan with only a five-hour window would be labeled wrongly.
 - The Copilot reader has been tested on a Copilot Enterprise seat. Other plans are untested.
@@ -130,7 +133,7 @@ bun run live
 bun run live anthropic
 ```
 
-`bun test` runs offline against fixtures taken from real responses. `bun run live` reads your real Copilot, OpenAI, and xAI logins and prints the footer text. It does not touch the Keychain. `bun run live anthropic` also reads the Keychain.
+`bun test` runs offline against fixtures taken from real responses. `bun run live` reads your real Copilot, OpenAI, xAI, and Go logins and prints the footer text. It does not touch the Keychain. `bun run live anthropic` also reads the Keychain.
 
 OpenCode loads the compiled `tui.js`, not `src/tui.tsx`. Run `bun run compile` after every change to `src/` and commit the result. CI fails when `tui.js` is out of date. The plugin ships compiled because OpenCode compiles Solid JSX only for files outside `node_modules`, and `plugin add` installs packages there. See [anomalyco/opencode#39986](https://github.com/anomalyco/opencode/issues/39986). The compile leaves `solid-js`, `@opentui/*`, and `@opencode/plugin` as imports, and OpenCode supplies them when it loads the plugin.
 

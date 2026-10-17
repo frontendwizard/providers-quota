@@ -1,5 +1,5 @@
-export type SourceID = "copilot" | "openai" | "anthropic" | "xai"
-export type Period = "month" | "week"
+export type SourceID = "copilot" | "openai" | "anthropic" | "xai" | "go"
+export type Period = "month" | "week" | "five-hour"
 export type Quota = {
   percentRemaining: number
   resetAt: Date
@@ -33,6 +33,7 @@ export const SOURCES: ReadonlyArray<{ id: SourceID; label: string; providers: re
   { id: "openai", label: "OpenAI", providers: ["openai"] },
   { id: "anthropic", label: "Claude", providers: ["anthropic"] },
   { id: "xai", label: "xAI", providers: ["xai"] },
+  { id: "go", label: "Go", providers: ["opencode-go"] },
 ]
 export const SOURCE_ORDER = SOURCES.map((source) => source.id)
 export type States = Record<SourceID, State>
@@ -146,6 +147,26 @@ export function parseXai(json: unknown): Quota {
   return { percentRemaining: 100 - used, resetAt, period, unlimited: false }
 }
 
+const goWindows: ReadonlyArray<{ name: string; period: Period }> = [
+  { name: "rolling", period: "five-hour" },
+  { name: "weekly", period: "week" },
+  { name: "monthly", period: "month" },
+]
+
+export function parseGo(json: unknown): Quota {
+  const usage = isRecord(json) ? json.usage : undefined
+  let chosen: { used: number; resetAt: Date; period: Period } | undefined
+  for (const { name, period } of goWindows) {
+    const window = isRecord(usage) ? usage[name] : undefined
+    if (!isRecord(window) || typeof window.percent !== "number" || !Number.isFinite(window.percent)) continue
+    const resetAt = new Date(String(window.resetsAt))
+    if (Number.isNaN(resetAt.getTime())) continue
+    if (!chosen || window.percent > chosen.used) chosen = { used: window.percent, resetAt, period }
+  }
+  if (!chosen) throw new Error("no billing period")
+  return { percentRemaining: 100 - chosen.used, resetAt: chosen.resetAt, period: chosen.period, unlimited: false }
+}
+
 /** Expiry of a JWT in ms epoch, or undefined when the token has no readable `exp`. */
 export function jwtExpiry(token: string): number | undefined {
   try {
@@ -163,6 +184,7 @@ const percentLeft = (quota: Quota) => number(quota.percentRemaining, { maximumFr
 const detail: Record<Period, (quota: Quota) => string> = {
   month: ({ counts }) => (counts ? ` (${number(counts.remaining)}/${number(counts.entitlement)})` : ""),
   week: () => " · weekly",
+  "five-hour": () => " · 5 hour",
 }
 
 const resets = (quota: Quota) =>
@@ -184,6 +206,7 @@ const cycleStart: Record<Period, (resetAt: Date) => Date> = {
     return start
   },
   week: (resetAt) => new Date(resetAt.getTime() - 7 * 24 * 60 * 60 * 1000),
+  "five-hour": (resetAt) => new Date(resetAt.getTime() - 5 * 60 * 60 * 1000),
 }
 
 const paceTone = ({ percentRemaining, resetAt, period }: Quota, now: number): Tone => {

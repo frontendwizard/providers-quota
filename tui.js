@@ -28,7 +28,8 @@ var SOURCES = [
   { id: "copilot", label: "Copilot", providers: ["github-copilot"] },
   { id: "openai", label: "OpenAI", providers: ["openai"] },
   { id: "anthropic", label: "Claude", providers: ["anthropic"] },
-  { id: "xai", label: "xAI", providers: ["xai"] }
+  { id: "xai", label: "xAI", providers: ["xai"] },
+  { id: "go", label: "Go", providers: ["opencode-go"] }
 ];
 var SOURCE_ORDER = SOURCES.map((source) => source.id);
 var isRecord = (value) => typeof value === "object" && value !== null;
@@ -117,6 +118,28 @@ function parseXai(json) {
   const used = finite(config.creditUsagePercent, "creditUsagePercent");
   return { percentRemaining: 100 - used, resetAt, period, unlimited: false };
 }
+var goWindows = [
+  { name: "rolling", period: "five-hour" },
+  { name: "weekly", period: "week" },
+  { name: "monthly", period: "month" }
+];
+function parseGo(json) {
+  const usage = isRecord(json) ? json.usage : undefined;
+  let chosen;
+  for (const { name, period } of goWindows) {
+    const window = isRecord(usage) ? usage[name] : undefined;
+    if (!isRecord(window) || typeof window.percent !== "number" || !Number.isFinite(window.percent))
+      continue;
+    const resetAt = new Date(String(window.resetsAt));
+    if (Number.isNaN(resetAt.getTime()))
+      continue;
+    if (!chosen || window.percent > chosen.used)
+      chosen = { used: window.percent, resetAt, period };
+  }
+  if (!chosen)
+    throw new Error("no billing period");
+  return { percentRemaining: 100 - chosen.used, resetAt: chosen.resetAt, period: chosen.period, unlimited: false };
+}
 function jwtExpiry(token) {
   try {
     const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
@@ -129,7 +152,8 @@ var number = (value, options) => value.toLocaleString("en-US", options);
 var percentLeft = (quota) => number(quota.percentRemaining, { maximumFractionDigits: 1 });
 var detail = {
   month: ({ counts }) => counts ? ` (${number(counts.remaining)}/${number(counts.entitlement)})` : "",
-  week: () => " \xB7 weekly"
+  week: () => " \xB7 weekly",
+  "five-hour": () => " \xB7 5 hour"
 };
 var resets = (quota) => ` \xB7 resets ${quota.resetAt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}`;
 var formats = {
@@ -143,7 +167,8 @@ var cycleStart = {
     start.setUTCMonth(start.getUTCMonth() - 1);
     return start;
   },
-  week: (resetAt) => new Date(resetAt.getTime() - 7 * 24 * 60 * 60 * 1000)
+  week: (resetAt) => new Date(resetAt.getTime() - 7 * 24 * 60 * 60 * 1000),
+  "five-hour": (resetAt) => new Date(resetAt.getTime() - 5 * 60 * 60 * 1000)
 };
 var paceTone = ({ percentRemaining, resetAt, period }, now) => {
   if (percentRemaining < 10)
@@ -310,11 +335,21 @@ var loadXai = async (env) => {
     "x-xai-token-auth": "xai-grok-cli"
   }));
 };
+var loadGo = async (env) => {
+  const credentials = await env.credentials();
+  const credential = credentials.find((item) => item.integrationID === "opencode-go" && item.active);
+  if (credential?.value.type !== "key" || typeof credential.value.key !== "string" || credential.value.key === "")
+    return null;
+  return parseGo(await getJson("https://opencode.ai/zen/go/v1/usage", {
+    Authorization: `Bearer ${credential.value.key}`
+  }));
+};
 var loaders = {
   copilot: loadCopilot,
   openai: loadOpenAI,
   anthropic: loadAnthropic,
-  xai: loadXai
+  xai: loadXai,
+  go: loadGo
 };
 
 // src/tui.tsx
@@ -332,6 +367,9 @@ var initial = () => ({
     type: "loading"
   },
   xai: {
+    type: "loading"
+  },
+  go: {
     type: "loading"
   }
 });

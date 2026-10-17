@@ -2,7 +2,7 @@ import { execFile } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { homedir, platform } from "node:os"
 import { join } from "node:path"
-import { jwtExpiry, parseClaude, parseCodex, parseCopilot, parseXai, type Quota, type SourceID } from "./quota"
+import { jwtExpiry, parseClaude, parseCodex, parseCopilot, parseGo, parseXai, type Quota, type SourceID } from "./quota"
 
 const USER_AGENT = "providers-quota/1.0"
 const KEYCHAIN_TIMEOUT_MS = 20_000
@@ -11,7 +11,7 @@ const KEYCHAIN_RETRY_MS = 10 * 60_000
 export type Credential = {
   integrationID: string
   active: boolean
-  value: { type: string; refresh?: string; access?: string; expires?: number }
+  value: { type: string; refresh?: string; access?: string; expires?: number; key?: string }
 }
 export type Env = { credentials: () => Promise<Credential[]> }
 /** Resolves to null when the user has no login for this source, so the footer skips it. */
@@ -151,9 +151,22 @@ const loadXai: Loader = async (env) => {
   )
 }
 
+const loadGo: Loader = async (env) => {
+  const credentials = await env.credentials()
+  const credential = credentials.find((item) => item.integrationID === "opencode-go" && item.active)
+  if (credential?.value.type !== "key" || typeof credential.value.key !== "string" || credential.value.key === "")
+    return null
+  return parseGo(
+    await getJson("https://opencode.ai/zen/go/v1/usage", {
+      Authorization: `Bearer ${credential.value.key}`,
+    }),
+  )
+}
+
 export const loaders: Record<SourceID, Loader> = {
   copilot: loadCopilot,
   openai: loadOpenAI,
   anthropic: loadAnthropic,
   xai: loadXai,
+  go: loadGo,
 }
