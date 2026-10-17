@@ -65,4 +65,4 @@ The plugin reads logins that belong to other tools. These rules always apply.
 - `src/sources.ts` holds the loaders. It is the only file that reads credentials or calls the network.
 - `src/tui.tsx` is the OpenCode shell. It holds the signals, the click handling, the commands, and the refresh timer.
 - `tui.js` is generated from `src/`. Do not edit it by hand.
-- `scripts/live.ts` prints the footer text from the user's real logins. `bun run live` reads Copilot and OpenAI. `bun run live anthropic` also reads the Keychain and can raise a macOS dialog. Run it only when you need it.
+- `scripts/live.ts` prints the footer text from the user's real logins. `bun run live` reads Copilot, OpenAI, and xAI. It does not touch the Keychain. `bun run live anthropic` also reads the Keychain and can raise a macOS dialog. Run it only when you need it.

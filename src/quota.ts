@@ -1,4 +1,4 @@
-export type SourceID = "copilot" | "openai" | "anthropic"
+export type SourceID = "copilot" | "openai" | "anthropic" | "xai"
 export type Period = "month" | "week"
 export type Quota = {
   percentRemaining: number
@@ -32,6 +32,7 @@ export const SOURCES: ReadonlyArray<{ id: SourceID; label: string; providers: re
   { id: "copilot", label: "Copilot", providers: ["github-copilot"] },
   { id: "openai", label: "OpenAI", providers: ["openai"] },
   { id: "anthropic", label: "Claude", providers: ["anthropic"] },
+  { id: "xai", label: "xAI", providers: ["xai"] },
 ]
 export const SOURCE_ORDER = SOURCES.map((source) => source.id)
 export type States = Record<SourceID, State>
@@ -126,6 +127,23 @@ export function parseClaude(json: unknown): Quota {
   const resetAt = new Date(String(weekly.resets_at))
   if (!Number.isFinite(weekly.utilization) || Number.isNaN(resetAt.getTime())) throw new Error(NO_WEEKLY)
   return { percentRemaining: 100 - Number(weekly.utilization), resetAt, period: "week", unlimited: false }
+}
+
+export function parseXai(json: unknown): Quota {
+  const config = isRecord(json) ? json.config : undefined
+  const current = isRecord(config) ? config.currentPeriod : undefined
+  if (!isRecord(config) || !isRecord(current)) throw new Error("no billing period")
+  const period =
+    current.type === "USAGE_PERIOD_TYPE_WEEKLY"
+      ? "week"
+      : current.type === "USAGE_PERIOD_TYPE_MONTHLY"
+        ? "month"
+        : undefined
+  if (!period) throw new Error("no billing period")
+  const resetAt = new Date(String(current.end))
+  if (Number.isNaN(resetAt.getTime())) throw new Error("no billing period")
+  const used = finite(config.creditUsagePercent, "creditUsagePercent")
+  return { percentRemaining: 100 - used, resetAt, period, unlimited: false }
 }
 
 /** Expiry of a JWT in ms epoch, or undefined when the token has no readable `exp`. */
