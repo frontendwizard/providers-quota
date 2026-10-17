@@ -148,6 +148,12 @@ function jwtExpiry(token) {
     return;
   }
 }
+function codexHttpError(status, body) {
+  const expired = (value) => isRecord(value) && value.code === "token_expired";
+  if (status === 401 && isRecord(body) && (expired(body.error) || expired(body.detail)))
+    return "Codex login expired";
+  return `HTTP ${status}`;
+}
 var number = (value, options) => value.toLocaleString("en-US", options);
 var percentLeft = (quota) => number(quota.percentRemaining, { maximumFractionDigits: 1 });
 var detail = {
@@ -219,7 +225,7 @@ var USER_AGENT = "providers-quota/1.0";
 var KEYCHAIN_TIMEOUT_MS = 20000;
 var KEYCHAIN_RETRY_MS = 10 * 60000;
 var isRecord2 = (value) => typeof value === "object" && value !== null;
-async function getJson(url, headers) {
+async function getJson(url, headers, httpError) {
   let response;
   try {
     response = await fetch(url, {
@@ -229,8 +235,17 @@ async function getJson(url, headers) {
   } catch {
     throw new Error("offline");
   }
-  if (!response.ok)
-    throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    if (!httpError)
+      throw new Error(`HTTP ${response.status}`);
+    let body;
+    try {
+      body = await response.json();
+    } catch {
+      body = undefined;
+    }
+    throw new Error(httpError(response.status, body));
+  }
   try {
     return await response.json();
   } catch {
@@ -274,7 +289,7 @@ var loadOpenAI = async () => {
   return parseCodex(await getJson("https://chatgpt.com/backend-api/wham/usage", {
     Authorization: `Bearer ${token}`,
     ...typeof account === "string" ? { "ChatGPT-Account-Id": account } : {}
-  }));
+  }, codexHttpError));
 };
 var readKeychain = () => new Promise((resolve) => {
   execFile("security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], { timeout: KEYCHAIN_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => {

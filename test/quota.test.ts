@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  codexHttpError,
   connectedProviders,
   DEFAULT_SETTINGS,
   isConfigured,
@@ -148,6 +149,10 @@ describe("view with a missing reading", () => {
     expect(copilot({ type: "failed", error: "HTTP 401" })).toEqual({ text: "Copilot quota: HTTP 401", tone: "error" })
     expect(copilot({ type: "failed", error: "HTTP 401" }, "compact")).toEqual({
       text: "Copilot quota: HTTP 401",
+      tone: "error",
+    })
+    expect(view({ type: "failed", error: "Codex login expired" }, now, "full", "OpenAI")).toEqual({
+      text: "OpenAI quota: Codex login expired",
       tone: "error",
     })
   })
@@ -430,6 +435,28 @@ describe("parseGo", () => {
         },
       }),
     ).toThrow("no billing period")
+  })
+})
+
+describe("codexHttpError", () => {
+  test("reads a 401 token_expired code as an expired Codex login", () => {
+    expect(codexHttpError(401, { error: { code: "token_expired" } })).toBe("Codex login expired")
+  })
+
+  test("reads the same code on detail", () => {
+    expect(codexHttpError(401, { detail: { code: "token_expired" } })).toBe("Codex login expired")
+  })
+
+  test("keeps another 401 code as HTTP 401", () => {
+    expect(codexHttpError(401, { error: { code: "invalid_api_key" } })).toBe("HTTP 401")
+  })
+
+  test("keeps token_expired on another status as that HTTP status", () => {
+    expect(codexHttpError(403, { error: { code: "token_expired" } })).toBe("HTTP 403")
+  })
+
+  test("keeps a non-object body as HTTP 401", () => {
+    expect(codexHttpError(401, "token_expired")).toBe("HTTP 401")
   })
 })
 
