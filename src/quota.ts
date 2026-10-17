@@ -177,6 +177,13 @@ export function jwtExpiry(token: string): number | undefined {
   }
 }
 
+/** The server can return `token_expired` while `jwtExpiry` is still in the future. */
+export function codexHttpError(status: number, body: unknown): string {
+  const expired = (value: unknown) => isRecord(value) && value.code === "token_expired"
+  if (status === 401 && isRecord(body) && (expired(body.error) || expired(body.detail))) return "Codex login expired"
+  return `HTTP ${status}`
+}
+
 const number = (value: number, options?: Intl.NumberFormatOptions) => value.toLocaleString("en-US", options)
 
 const percentLeft = (quota: Quota) => number(quota.percentRemaining, { maximumFractionDigits: 1 })

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  codexHttpError,
   connectedProviders,
   DEFAULT_SETTINGS,
   isConfigured,
@@ -21,16 +22,6 @@ import {
   type State,
   type States,
 } from "../src/quota"
-import * as quotaModule from "../src/quota"
-
-const isCodexHttpError = (value: unknown): value is (status: number, body: unknown) => string =>
-  typeof value === "function"
-
-// A missing export stands in for today's `HTTP ${status}`, so the new assertions fail before the function exists.
-const codexHttpError = (status: number, body: unknown): string => {
-  const exported: unknown = Object.getOwnPropertyDescriptor(quotaModule, "codexHttpError")?.value
-  return isCodexHttpError(exported) ? exported(status, body) : `HTTP ${status}`
-}
 
 const now = Date.parse("2026-10-16T00:00:00.000Z")
 const day = 86_400_000

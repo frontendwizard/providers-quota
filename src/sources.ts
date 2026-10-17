@@ -2,7 +2,7 @@ import { execFile } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { homedir, platform } from "node:os"
 import { join } from "node:path"
-import { jwtExpiry, parseClaude, parseCodex, parseCopilot, parseGo, parseXai, type Quota, type SourceID } from "./quota"
+import { codexHttpError, jwtExpiry, parseClaude, parseCodex, parseCopilot, parseGo, parseXai, type Quota, type SourceID } from "./quota"
 
 const USER_AGENT = "providers-quota/1.0"
 const KEYCHAIN_TIMEOUT_MS = 20_000
@@ -20,7 +20,11 @@ export type Loader = (env: Env) => Promise<Quota | null>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
 
-async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
+async function getJson(
+  url: string,
+  headers: Record<string, string>,
+  httpError?: (status: number, body: unknown) => string,
+): Promise<unknown> {
   let response: Response
   try {
     response = await fetch(url, {
@@ -30,7 +34,16 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
   } catch {
     throw new Error("offline")
   }
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  if (!response.ok) {
+    if (!httpError) throw new Error(`HTTP ${response.status}`)
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      body = undefined
+    }
+    throw new Error(httpError(response.status, body))
+  }
   try {
     return await response.json()
   } catch {
@@ -73,10 +86,14 @@ const loadOpenAI: Loader = async () => {
   if (expiry !== undefined && expiry <= Date.now()) throw new Error("Codex login expired")
   const account = tokens?.account_id
   return parseCodex(
-    await getJson("https://chatgpt.com/backend-api/wham/usage", {
-      Authorization: `Bearer ${token}`,
-      ...(typeof account === "string" ? { "ChatGPT-Account-Id": account } : {}),
-    }),
+    await getJson(
+      "https://chatgpt.com/backend-api/wham/usage",
+      {
+        Authorization: `Bearer ${token}`,
+        ...(typeof account === "string" ? { "ChatGPT-Account-Id": account } : {}),
+      },
+      codexHttpError,
+    ),
   )
 }
 

@@ -94,7 +94,7 @@ When a refresh fails and there is no earlier reading, the line shows the provide
 | Message | What to do |
 | --- | --- |
 | `not logged in` | Sign in to GitHub Copilot in OpenCode. |
-| `Codex login expired` or `Codex login unreadable` | Run the Codex CLI once so that it refreshes `~/.codex/auth.json`. |
+| `Codex login expired` or `Codex login unreadable` | Run the Codex CLI once so that it refreshes `~/.codex/auth.json`. The footer shows `Codex login expired` for a Codex 401 whose body code is `token_expired`, even when the JWT `exp` is still in the future. |
 | `Claude Code login expired` or `Claude Code login unreadable` | Run Claude Code once so that it refreshes its Keychain entry. |
 | `xAI login expired` | Use xAI in OpenCode again so OpenCode refreshes the login. The plugin does not refresh it. |
 | `Keychain timed out` or `Keychain unavailable` | Answer the macOS Keychain dialog, then wait up to 10 minutes for the next read. |
