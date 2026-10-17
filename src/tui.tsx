@@ -100,10 +100,8 @@ export default Plugin.define({
       const fg = (tone: Tone) => {
         const resting = settings().colored ? color(tone) : context.theme.text.muted
         if (!hovered()) return resting
-        const base = channels(context.theme.text.base)
-        const next = hoverRgb(channels(resting), channels(context.theme.text.muted), base)
-        // hoverRgb returns that base triple for a gray line, so use the theme color itself.
-        if (next === base) return context.theme.text.base
+        if (resting.equals(context.theme.text.muted)) return context.theme.text.base
+        const next = hoverRgb(channels(resting), channels(context.theme.text.muted), channels(context.theme.text.base))
         return RGBA.fromInts(next[0], next[1], next[2], resting.toInts()[3])
       }
       const divider = (side: "before" | "after") => (

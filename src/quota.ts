@@ -267,7 +267,6 @@ export function pickSource(providerID: string | undefined, states: States): Sour
   return SOURCE_ORDER.find((id) => present(states, id))
 }
 
-/** A muted line becomes the main text color. Any other line moves 45 percent toward it. */
 export function hoverRgb(
   resting: readonly [number, number, number],
   muted: readonly [number, number, number],

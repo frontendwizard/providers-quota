@@ -571,7 +571,7 @@ describe("hoverRgb", () => {
   const base = [240, 240, 240] as const
 
   test("returns the base triple when the resting color is muted", () => {
-    expect(hoverRgb([120, 120, 120], muted, base)).toBe(base)
+    expect(hoverRgb([120, 120, 120], muted, base)).toEqual(base)
   })
 
   test("moves a status color 45 percent toward base", () => {
