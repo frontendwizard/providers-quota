@@ -29,6 +29,7 @@ const initial = (): States => ({
   openai: { type: "loading" },
   anthropic: { type: "loading" },
   xai: { type: "loading" },
+  go: { type: "loading" },
 })
 
 const lastQuota = (state: State): Quota | undefined =>
