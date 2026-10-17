@@ -3,12 +3,14 @@
 
 // src/tui.tsx
 import { memo as _$memo } from "@opentui/solid";
+import { insertNode as _$insertNode } from "@opentui/solid";
 import { createComponent as _$createComponent } from "@opentui/solid";
 import { setProp as _$setProp } from "@opentui/solid";
 import { effect as _$effect } from "@opentui/solid";
 import { insert as _$insert } from "@opentui/solid";
 import { createElement as _$createElement } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
+import { RGBA } from "@opentui/core";
 import { createSignal, Show } from "solid-js";
 
 // src/sources.ts
@@ -218,6 +220,15 @@ function pickSource(providerID, states) {
   if (own && present(states, own.id))
     return own.id;
   return SOURCE_ORDER.find((id) => present(states, id));
+}
+function hoverRgb(resting, muted, base) {
+  if (resting[0] === muted[0] && resting[1] === muted[1] && resting[2] === muted[2])
+    return base;
+  return [
+    Math.round(resting[0] + (base[0] - resting[0]) * 0.45),
+    Math.round(resting[1] + (base[1] - resting[1]) * 0.45),
+    Math.round(resting[2] + (base[2] - resting[2]) * 0.45)
+  ];
 }
 
 // src/sources.ts
@@ -449,13 +460,27 @@ var tui_default = Plugin.define({
       }
     };
     const color = (tone) => tone === "muted" ? context.theme.text.muted : context.theme.text.feedback[tone].base;
+    const channels = (value) => {
+      const [red, green, blue] = value.toInts();
+      return [red, green, blue];
+    };
     const QuotaLine = (props) => {
+      const [hovered, setHovered] = createSignal(false);
       const line = () => {
         const id = shown();
         if (!id)
           return;
         const result = view(states()[id], Date.now(), mode(), labels.get(id) ?? id, settings().reset[mode()]);
         return result.text ? result : undefined;
+      };
+      const fg = (tone) => {
+        const resting = settings().colored ? color(tone) : context.theme.text.muted;
+        if (!hovered())
+          return resting;
+        if (resting.equals(context.theme.text.muted))
+          return context.theme.text.base;
+        const next = hoverRgb(channels(resting), channels(context.theme.text.muted), channels(context.theme.text.base));
+        return RGBA.fromInts(next[0], next[1], next[2], resting.toInts()[3]);
       };
       const divider = (side) => _$createComponent(Show, {
         get when() {
@@ -475,14 +500,18 @@ var tui_default = Plugin.define({
           return line();
         },
         children: (current) => (() => {
-          var _el$2 = _$createElement("text");
-          _$setProp(_el$2, "selectable", false);
+          var _el$2 = _$createElement("box"), _el$3 = _$createElement("text");
+          _$insertNode(_el$2, _el$3);
           _$setProp(_el$2, "flexShrink", 0);
+          _$setProp(_el$2, "onMouseOver", () => setHovered(true));
+          _$setProp(_el$2, "onMouseOut", () => setHovered(false));
           _$setProp(_el$2, "onMouseUp", rotate);
-          _$insert(_el$2, () => divider("before"), null);
-          _$insert(_el$2, () => current().text, null);
-          _$insert(_el$2, () => divider("after"), null);
-          _$effect((_$p) => _$setProp(_el$2, "fg", settings().colored ? color(current().tone) : context.theme.text.muted, _$p));
+          _$setProp(_el$3, "selectable", false);
+          _$setProp(_el$3, "wrapMode", "none");
+          _$insert(_el$3, () => divider("before"), null);
+          _$insert(_el$3, () => current().text, null);
+          _$insert(_el$3, () => divider("after"), null);
+          _$effect((_$p) => _$setProp(_el$3, "fg", fg(current().tone), _$p));
           return _el$2;
         })()
       });
