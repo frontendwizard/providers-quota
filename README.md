@@ -53,8 +53,9 @@ The repository contains the compiled plugin, `tui.js`, so there is nothing to in
 | Copilot | Premium requests per month | `api.github.com/copilot_internal/user`, with OpenCode's own GitHub Copilot login | `github-copilot` connected in OpenCode |
 | OpenAI | Weekly | `chatgpt.com/backend-api/wham/usage`, with the token in `~/.codex/auth.json` | `openai` connected in OpenCode, and a Codex CLI signed in with ChatGPT |
 | Claude | Weekly (seven days) | `api.anthropic.com/api/oauth/usage`, with the token in the macOS Keychain item `Claude Code-credentials` | `anthropic` connected in OpenCode, macOS, and Claude Code signed in |
+| xAI | Subscription window, weekly or monthly | `cli-chat-proxy.grok.com/v1/billing?format=credits`, with the OpenCode xAI OAuth access token | `xai` connected in OpenCode with the SuperGrok device login. An API key connection is skipped. |
 
-The plugin asks OpenCode which providers are connected, either as a saved login or as an API key in an environment variable. It shows a provider only when OpenCode has it connected and the plugin has a reader for it. Other connected providers, such as OpenCode Go, expose no usage endpoint, so the plugin skips them.
+The plugin asks OpenCode which providers are connected, either as a saved login or as an API key in an environment variable. It shows a provider only when OpenCode has it connected and the plugin has a reader for it. An xAI API key connection is skipped, because that login has no subscription meter. Other connected providers, such as OpenCode Go, expose no usage endpoint, so the plugin skips them.
 
 OpenAI usage comes from your Codex CLI login and not from OpenCode's OpenAI login. In testing on OpenCode 2.0.30, the usage endpoint rejected OpenCode's token with a 401. That token is issued for calling models.
 
@@ -62,7 +63,7 @@ OpenAI usage comes from your Codex CLI login and not from OpenCode's OpenAI logi
 
 The line sits in the footer on the home screen. By default, inside a session it sits at the right end of the prompt row, after the built-in shell and subagent indicator, so it does not move when a background shell starts. A muted dot divider, like the ones between the built-in footer segments, faces the session stats. On a terminal narrower than about 90 columns the full format is cut off at the right edge, so use `/quota` for the compact format. Every 60 seconds the plugin checks which providers are connected and refreshes the usage of each one. A newly connected provider appears after its first usage request finishes.
 
-- Click the line to show the next provider. Rotation order is Copilot, OpenAI, Claude. It skips providers that are not set up and keeps providers whose last refresh failed, because their message tells you the fix.
+- Click the line to show the next provider. Rotation order is Copilot, OpenAI, Claude, xAI. It skips providers that are not set up and keeps providers whose last refresh failed, because their message tells you the fix.
 - One second after your last click, the line returns to the provider of the model you are using. When that provider is not set up, it returns to the first provider in the rotation order that is.
 - Run `/quota-next` to rotate from the keyboard. It is also in the command palette as "Next quota source".
 - Run `/quota` to switch between the full and the compact format.
@@ -93,11 +94,12 @@ When a refresh fails and there is no earlier reading, the line shows the provide
 | `not logged in` | Sign in to GitHub Copilot in OpenCode. |
 | `Codex login expired` or `Codex login unreadable` | Run the Codex CLI once so that it refreshes `~/.codex/auth.json`. |
 | `Claude Code login expired` or `Claude Code login unreadable` | Run Claude Code once so that it refreshes its Keychain entry. |
+| `xAI login expired` | Use xAI in OpenCode again so OpenCode refreshes the login. The plugin does not refresh it. |
 | `Keychain timed out` or `Keychain unavailable` | Answer the macOS Keychain dialog, then wait up to 10 minutes for the next read. |
 | `offline` | Check your network connection. The plugin retries after 60 seconds. |
 | `HTTP 401` or `HTTP 403` | The provider rejected the token. Sign in again. |
 | Another `HTTP` code | The provider failed or rate-limited the request. The plugin retries after 60 seconds. |
-| `bad body`, `no weekly window`, `no premium_interactions`, or `bad` followed by a field name | The provider changed its response, or the response was not JSON. Open an issue with the shape of the response, with secrets removed. |
+| `bad body`, `no weekly window`, `no billing period`, `no premium_interactions`, or `bad` followed by a field name | The provider changed its response, or the response was not JSON. Open an issue with the shape of the response, with secrets removed. |
 
 The display settings are the commands above. To change the refresh interval or the snap-back delay, edit `REFRESH_MS` or `SNAP_BACK_MS` at the top of `src/tui.tsx`, then run `bun run compile`.
 
@@ -110,8 +112,9 @@ The display settings are the commands above. To change the refresh interval or t
 
 ## Limitations
 
-- All three usage endpoints are undocumented. A provider can change or remove one without notice, and the line then shows an error.
+- All four usage endpoints are undocumented. A provider can change or remove one without notice, and the line then shows an error.
 - The Claude reader has never run against a live response. Its parser follows the response shape that `api.anthropic.com/api/oauth/usage` is expected to return, `seven_day.utilization` and `seven_day.resets_at`, and it is covered only by a fixture. If you use it, report whether the number matches Claude Code.
+- The xAI reader has been checked against one live billing response.
 - Claude Code and the Codex CLI refresh their tokens only while you use them. The Claude and OpenAI lines read "login expired" once the token lapses, until you run the tool again.
 - The OpenAI reader labels the longest window it finds as weekly. A plan with only a five-hour window would be labeled wrongly.
 - The Copilot reader has been tested on a Copilot Enterprise seat. Other plans are untested.
@@ -127,7 +130,7 @@ bun run live
 bun run live anthropic
 ```
 
-`bun test` runs offline against fixtures taken from real responses. `bun run live` reads your real Copilot and OpenAI logins and prints the footer text. `bun run live anthropic` also reads the Keychain.
+`bun test` runs offline against fixtures taken from real responses. `bun run live` reads your real Copilot, OpenAI, and xAI logins and prints the footer text. It does not touch the Keychain. `bun run live anthropic` also reads the Keychain.
 
 OpenCode loads the compiled `tui.js`, not `src/tui.tsx`. Run `bun run compile` after every change to `src/` and commit the result. CI fails when `tui.js` is out of date. The plugin ships compiled because OpenCode compiles Solid JSX only for files outside `node_modules`, and `plugin add` installs packages there. See [anomalyco/opencode#39986](https://github.com/anomalyco/opencode/issues/39986). The compile leaves `solid-js`, `@opentui/*`, and `@opencode/plugin` as imports, and OpenCode supplies them when it loads the plugin.
 

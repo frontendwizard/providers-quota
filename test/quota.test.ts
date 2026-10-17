@@ -8,6 +8,7 @@ import {
   parseClaude,
   parseCodex,
   parseCopilot,
+  parseXai,
   pickSource,
   resolveSettings,
   SOURCE_ORDER,
@@ -47,9 +48,15 @@ const states = (overrides: Partial<States> = {}): States => ({
   copilot: { type: "loading" },
   openai: { type: "loading" },
   anthropic: { type: "loading" },
+  xai: { type: "loading" },
   ...overrides,
 })
-const allAbsent: States = { copilot: { type: "absent" }, openai: { type: "absent" }, anthropic: { type: "absent" } }
+const allAbsent: States = {
+  copilot: { type: "absent" },
+  openai: { type: "absent" },
+  anthropic: { type: "absent" },
+  xai: { type: "absent" },
+}
 
 describe("view with a monthly quota", () => {
   test("shows counts and the reset date in the full format", () => {
@@ -258,6 +265,69 @@ describe("parseClaude", () => {
   })
 })
 
+describe("parseXai", () => {
+  const body = {
+    config: {
+      currentPeriod: {
+        type: "USAGE_PERIOD_TYPE_WEEKLY",
+        start: "2026-10-17T06:09:26.533+00:00",
+        end: "2026-10-24T06:09:26.533+00:00",
+      },
+      creditUsagePercent: 9,
+      productUsage: [{ product: "Api", usagePercent: 9 }],
+      isUnifiedBillingUser: true,
+      prepaidBalance: { val: 0 },
+      billingPeriodStart: "2026-10-17T06:09:26.533+00:00",
+      billingPeriodEnd: "2026-10-24T06:09:26.533+00:00",
+    },
+  }
+
+  test("reads percent remaining from the weekly billing window", () => {
+    expect(parseXai(body)).toEqual({
+      percentRemaining: 91,
+      resetAt: new Date("2026-10-24T06:09:26.533Z"),
+      period: "week",
+      unlimited: false,
+    })
+  })
+
+  test("rejects an omitted creditUsagePercent", () => {
+    const { creditUsagePercent: _used, ...config } = body.config
+    expect(() => parseXai({ config })).toThrow("bad creditUsagePercent")
+  })
+
+  test("reads a monthly period", () => {
+    const monthly = {
+      config: {
+        ...body.config,
+        currentPeriod: { ...body.config.currentPeriod, type: "USAGE_PERIOD_TYPE_MONTHLY" },
+      },
+    }
+    expect(parseXai(monthly).period).toBe("month")
+  })
+
+  test("rejects a missing period, a bad end, and a non-finite percent", () => {
+    expect(() => parseXai({ config: {} })).toThrow("no billing period")
+    expect(() =>
+      parseXai({
+        config: {
+          currentPeriod: { type: "USAGE_PERIOD_TYPE_WEEKLY", end: "nope" },
+          creditUsagePercent: 9,
+        },
+      }),
+    ).toThrow("no billing period")
+    expect(() =>
+      parseXai({
+        config: {
+          currentPeriod: { type: "USAGE_PERIOD_TYPE_OTHER", end: "2026-10-24T06:09:26.533+00:00" },
+          creditUsagePercent: 9,
+        },
+      }),
+    ).toThrow("no billing period")
+    expect(() => parseXai({ config: { ...body.config, creditUsagePercent: Number.NaN } })).toThrow("bad creditUsagePercent")
+  })
+})
+
 describe("jwtExpiry", () => {
   const jwt = (payload: object) => `h.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.s`
 
@@ -276,13 +346,15 @@ describe("nextSource", () => {
   test("walks the order and wraps", () => {
     expect(nextSource(SOURCE_ORDER, "copilot", states())).toBe("openai")
     expect(nextSource(SOURCE_ORDER, "openai", states())).toBe("anthropic")
-    expect(nextSource(SOURCE_ORDER, "anthropic", states())).toBe("copilot")
+    expect(nextSource(SOURCE_ORDER, "anthropic", states())).toBe("xai")
+    expect(nextSource(SOURCE_ORDER, "xai", states())).toBe("copilot")
     expect(nextSource(SOURCE_ORDER, undefined, states())).toBe("copilot")
   })
 
   test("skips absent sources", () => {
     expect(nextSource(SOURCE_ORDER, "copilot", states({ openai: { type: "absent" } }))).toBe("anthropic")
-    expect(nextSource(SOURCE_ORDER, "anthropic", states({ copilot: { type: "absent" } }))).toBe("openai")
+    expect(nextSource(SOURCE_ORDER, "anthropic", states({ copilot: { type: "absent" } }))).toBe("xai")
+    expect(nextSource(SOURCE_ORDER, "xai", states({ copilot: { type: "absent" } }))).toBe("openai")
   })
 
   test("keeps failed sources in the rotation", () => {
@@ -291,7 +363,7 @@ describe("nextSource", () => {
   })
 
   test("stays on the shown source when no other qualifies", () => {
-    const onlyCopilot = states({ openai: { type: "absent" }, anthropic: { type: "absent" } })
+    const onlyCopilot = states({ openai: { type: "absent" }, anthropic: { type: "absent" }, xai: { type: "absent" } })
     expect(nextSource(SOURCE_ORDER, "copilot", onlyCopilot)).toBe("copilot")
   })
 
@@ -305,6 +377,7 @@ describe("pickSource", () => {
     expect(pickSource("github-copilot", states())).toBe("copilot")
     expect(pickSource("openai", states())).toBe("openai")
     expect(pickSource("anthropic", states())).toBe("anthropic")
+    expect(pickSource("xai", states())).toBe("xai")
   })
 
   test("falls back to the first present source", () => {
@@ -326,19 +399,20 @@ describe("connectedProviders", () => {
     { id: "openai", methods: [{ type: "oauth" }], connections: [{ type: "credential" }] },
     { id: "opencode-go", methods: [{ type: "key" }], connections: [{ type: "credential" }] },
     { id: "groq", methods: [{ type: "env" }], connections: [{ type: "env" }] },
+    { id: "xai", connections: [{ type: "credential" }] },
   ]
   const sourcesFor = (connected: ReadonlySet<string>) =>
     SOURCES.filter((source) => isConfigured(source, connected)).map((source) => source.id)
 
   test("keeps integrations that have a connection, saved login or env key", () => {
     const connected = connectedProviders({ location: { directory: "/x" }, data: integrations })
-    expect([...connected].sort()).toEqual(["github-copilot", "groq", "openai", "opencode-go"])
-    expect(sourcesFor(connected)).toEqual(["copilot", "openai"])
+    expect([...connected].sort()).toEqual(["github-copilot", "groq", "openai", "opencode-go", "xai"])
+    expect(sourcesFor(connected)).toEqual(["copilot", "openai", "xai"])
   })
 
   test("adds a source when its provider gets connected", () => {
     const withKey = connectedProviders({ data: [...integrations.slice(1), { id: "anthropic", connections: [{ type: "env" }] }] })
-    expect(sourcesFor(withKey)).toEqual(["copilot", "openai", "anthropic"])
+    expect(sourcesFor(withKey)).toEqual(["copilot", "openai", "anthropic", "xai"])
   })
 
   test("ignores malformed entries", () => {

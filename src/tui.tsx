@@ -24,7 +24,12 @@ const REFRESH_MS = 60_000
 const SNAP_BACK_MS = 1000
 
 const labels = new Map(SOURCES.map((source) => [source.id, source.label]))
-const initial = (): States => ({ copilot: { type: "loading" }, openai: { type: "loading" }, anthropic: { type: "loading" } })
+const initial = (): States => ({
+  copilot: { type: "loading" },
+  openai: { type: "loading" },
+  anthropic: { type: "loading" },
+  xai: { type: "loading" },
+})
 
 const lastQuota = (state: State): Quota | undefined =>
   state.type === "ready" ? state.quota : state.type === "failed" ? state.last : undefined

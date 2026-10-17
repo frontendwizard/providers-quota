@@ -6,7 +6,7 @@ if (result.exitCode !== 0) throw new Error("`opencode api get /api/credential` f
 const credentials = (JSON.parse(result.stdout.toString()) as { data: Credential[] }).data
 const env = { credentials: async () => credentials }
 
-const ids = (Bun.argv.slice(2).length ? Bun.argv.slice(2) : ["copilot", "openai"]) as SourceID[]
+const ids = (Bun.argv.slice(2).length ? Bun.argv.slice(2) : ["copilot", "openai", "xai"]) as SourceID[]
 
 for (const id of ids) {
   let state: State

@@ -27,7 +27,8 @@ var DEFAULT_SETTINGS = {
 var SOURCES = [
   { id: "copilot", label: "Copilot", providers: ["github-copilot"] },
   { id: "openai", label: "OpenAI", providers: ["openai"] },
-  { id: "anthropic", label: "Claude", providers: ["anthropic"] }
+  { id: "anthropic", label: "Claude", providers: ["anthropic"] },
+  { id: "xai", label: "xAI", providers: ["xai"] }
 ];
 var SOURCE_ORDER = SOURCES.map((source) => source.id);
 var isRecord = (value) => typeof value === "object" && value !== null;
@@ -101,6 +102,20 @@ function parseClaude(json) {
   if (!Number.isFinite(weekly.utilization) || Number.isNaN(resetAt.getTime()))
     throw new Error(NO_WEEKLY);
   return { percentRemaining: 100 - Number(weekly.utilization), resetAt, period: "week", unlimited: false };
+}
+function parseXai(json) {
+  const config = isRecord(json) ? json.config : undefined;
+  const current = isRecord(config) ? config.currentPeriod : undefined;
+  if (!isRecord(config) || !isRecord(current))
+    throw new Error("no billing period");
+  const period = current.type === "USAGE_PERIOD_TYPE_WEEKLY" ? "week" : current.type === "USAGE_PERIOD_TYPE_MONTHLY" ? "month" : undefined;
+  if (!period)
+    throw new Error("no billing period");
+  const resetAt = new Date(String(current.end));
+  if (Number.isNaN(resetAt.getTime()))
+    throw new Error("no billing period");
+  const used = finite(config.creditUsagePercent, "creditUsagePercent");
+  return { percentRemaining: 100 - used, resetAt, period, unlimited: false };
 }
 function jwtExpiry(token) {
   try {
@@ -281,10 +296,25 @@ var loadAnthropic = async () => {
     "anthropic-beta": "oauth-2025-04-20"
   }));
 };
+var loadXai = async (env) => {
+  const credentials = await env.credentials();
+  const credential = credentials.find((item) => item.integrationID === "xai" && item.active);
+  if (credential?.value.type !== "oauth" || typeof credential.value.access !== "string" || credential.value.access === "")
+    return null;
+  const access = credential.value.access;
+  const expiry = typeof credential.value.expires === "number" ? credential.value.expires : jwtExpiry(access);
+  if (expiry !== undefined && expiry <= Date.now())
+    throw new Error("xAI login expired");
+  return parseXai(await getJson("https://cli-chat-proxy.grok.com/v1/billing?format=credits", {
+    Authorization: `Bearer ${access}`,
+    "x-xai-token-auth": "xai-grok-cli"
+  }));
+};
 var loaders = {
   copilot: loadCopilot,
   openai: loadOpenAI,
-  anthropic: loadAnthropic
+  anthropic: loadAnthropic,
+  xai: loadXai
 };
 
 // src/tui.tsx
@@ -299,6 +329,9 @@ var initial = () => ({
     type: "loading"
   },
   anthropic: {
+    type: "loading"
+  },
+  xai: {
     type: "loading"
   }
 });

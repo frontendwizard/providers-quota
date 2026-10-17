@@ -2,13 +2,17 @@ import { execFile } from "node:child_process"
 import { readFile } from "node:fs/promises"
 import { homedir, platform } from "node:os"
 import { join } from "node:path"
-import { jwtExpiry, parseClaude, parseCodex, parseCopilot, type Quota, type SourceID } from "./quota"
+import { jwtExpiry, parseClaude, parseCodex, parseCopilot, parseXai, type Quota, type SourceID } from "./quota"
 
 const USER_AGENT = "providers-quota/1.0"
 const KEYCHAIN_TIMEOUT_MS = 20_000
 const KEYCHAIN_RETRY_MS = 10 * 60_000
 
-export type Credential = { integrationID: string; active: boolean; value: { type: string; refresh?: string } }
+export type Credential = {
+  integrationID: string
+  active: boolean
+  value: { type: string; refresh?: string; access?: string; expires?: number }
+}
 export type Env = { credentials: () => Promise<Credential[]> }
 /** Resolves to null when the user has no login for this source, so the footer skips it. */
 export type Loader = (env: Env) => Promise<Quota | null>
@@ -131,8 +135,25 @@ const loadAnthropic: Loader = async () => {
   )
 }
 
+const loadXai: Loader = async (env) => {
+  const credentials = await env.credentials()
+  const credential = credentials.find((item) => item.integrationID === "xai" && item.active)
+  if (credential?.value.type !== "oauth" || typeof credential.value.access !== "string" || credential.value.access === "")
+    return null
+  const access = credential.value.access
+  const expiry = typeof credential.value.expires === "number" ? credential.value.expires : jwtExpiry(access)
+  if (expiry !== undefined && expiry <= Date.now()) throw new Error("xAI login expired")
+  return parseXai(
+    await getJson("https://cli-chat-proxy.grok.com/v1/billing?format=credits", {
+      Authorization: `Bearer ${access}`,
+      "x-xai-token-auth": "xai-grok-cli",
+    }),
+  )
+}
+
 export const loaders: Record<SourceID, Loader> = {
   copilot: loadCopilot,
   openai: loadOpenAI,
   anthropic: loadAnthropic,
+  xai: loadXai,
 }
